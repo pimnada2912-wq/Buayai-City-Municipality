@@ -1,0 +1,1078 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>นัดเก็บขยะชิ้นใหญ่และขยะอันตราย - เทศบาลเมืองบัวใหญ่</title>
+    <meta name="robots" content="noindex, nofollow">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Sarabun', sans-serif; }
+
+        /* ใบงานสำหรับพิมพ์ (ซ่อนบนหน้าจอ) */
+        #printArea { display: none; }
+        @media print {
+            @page { size: A4 landscape; margin: 10mm; }
+            body > *:not(#printArea) { display: none !important; }
+            body { background: #fff !important; }
+            #printArea { display: block !important; font-family: 'Sarabun', sans-serif; color: #000; }
+            #printArea h1 { font-size: 16px; font-weight: 700; margin: 0 0 2px; }
+            #printArea .meta { font-size: 11px; margin-bottom: 8px; }
+            #printArea table { width: 100%; border-collapse: collapse; font-size: 10.5px; }
+            #printArea th, #printArea td { border: 1px solid #444; padding: 4px 5px; vertical-align: top; text-align: left; }
+            #printArea th { background: #e5e7eb; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+            #printArea tr { page-break-inside: avoid; }
+            #printArea .nowrap { white-space: nowrap; }
+        }
+    </style>
+</head>
+<body class="bg-slate-100 font-sans min-h-screen text-gray-800 pb-12">
+
+    <header class="bg-gradient-to-r from-emerald-800 via-teal-800 to-emerald-900 text-white shadow-lg sticky top-0 z-50">
+        <div class="max-w-5xl mx-auto px-4 py-4 flex justify-between items-center">
+            <div class="flex items-center space-x-3">
+                <div class="shrink-0 w-12 h-12 rounded-2xl bg-white shadow-md flex items-center justify-center overflow-hidden text-3xl">
+                    <img data-logo alt="โลโก้เทศบาลเมืองบัวใหญ่" class="w-full h-full object-contain p-1"
+                         onerror="this.replaceWith(document.createTextNode('🚛'))">
+                </div>
+                <div>
+                    <h1 class="text-lg md:text-xl font-bold">นัดเก็บขยะชิ้นใหญ่และขยะอันตราย</h1>
+                    <p class="text-xs text-emerald-200 opacity-90">เทศบาลเมืองบัวใหญ่ · ส่วนงานเจ้าหน้าที่จัดการคิวคำขอ</p>
+                </div>
+            </div>
+            <div class="flex items-center space-x-2">
+                <span class="hidden sm:inline-flex bg-emerald-500/20 text-emerald-100 border border-emerald-400/30 px-3 py-1 rounded-full text-xs font-semibold">
+                    👑 แผงควบคุมเจ้าหน้าที่
+                </span>
+                <span id="userEmail" class="hidden md:inline text-xs text-emerald-100 opacity-90"></span>
+                <button id="logoutBtn" onclick="logout()" class="hidden bg-white/15 hover:bg-white/25 border border-white/20 text-white text-xs font-semibold px-3 py-1.5 rounded-full transition">
+                    ออกจากระบบ
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- หน้าล็อกอินเจ้าหน้าที่ -->
+    <section id="loginView" class="hidden max-w-sm mx-auto p-4 mt-12">
+        <div class="bg-white rounded-2xl shadow-md p-6 border border-slate-200/80">
+            <div class="text-center mb-5">
+                <div class="w-20 h-20 mx-auto mb-2 flex items-center justify-center text-4xl">
+                    <img data-logo alt="โลโก้เทศบาลเมืองบัวใหญ่" class="w-full h-full object-contain"
+                         onerror="this.replaceWith(document.createTextNode('🔐'))">
+                </div>
+                <h2 class="text-lg font-bold text-gray-800">เข้าสู่ระบบเจ้าหน้าที่</h2>
+                <p class="text-xs text-gray-500 mt-1">เฉพาะเจ้าหน้าที่ที่ได้รับอนุญาตเท่านั้น</p>
+            </div>
+            <form onsubmit="login(event)" class="space-y-4">
+                <div>
+                    <label class="block text-sm font-semibold text-gray-700 mb-1">อีเมล</label>
+                    <input type="email" id="loginEmail" required autocomplete="username" class="w-full p-3 bg-slate-50 border border-gray-300 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:bg-white focus:outline-none transition" placeholder="staff@example.com">
+                </div>
+                <div>
+                    <label class="block text-sm font-semibold text-gray-700 mb-1">รหัสผ่าน</label>
+                    <input type="password" id="loginPassword" required autocomplete="current-password" class="w-full p-3 bg-slate-50 border border-gray-300 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:bg-white focus:outline-none transition" placeholder="••••••••">
+                </div>
+                <p id="loginError" class="hidden text-sm text-red-600 bg-red-50 border border-red-200 rounded-xl p-2.5"></p>
+                <button type="submit" id="loginBtn" class="w-full bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-700 hover:from-emerald-700 hover:to-teal-800 text-white p-3 rounded-xl font-bold shadow-md transition disabled:opacity-60">
+                    เข้าสู่ระบบ
+                </button>
+            </form>
+        </div>
+    </section>
+
+    <main id="appMain" class="hidden max-w-5xl mx-auto p-4 space-y-6 mt-2">
+        <div>
+            <h2 class="text-base font-bold text-gray-800 mb-3 flex items-center space-x-2">
+                <span>📊</span>
+                <span>ภาพรวมคำขอ</span>
+            </h2>
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <div class="bg-white p-4 rounded-2xl shadow-sm border border-slate-200 text-center border-l-4 border-l-blue-500">
+                    <p class="text-3xl font-bold text-gray-800" id="totalRequests">0</p>
+                    <p class="text-xs font-medium text-gray-500 mt-1">คำขอทั้งหมด</p>
+                </div>
+                <div class="bg-white p-4 rounded-2xl shadow-sm border border-slate-200 text-center border-l-4 border-l-amber-500">
+                    <p class="text-3xl font-bold text-amber-600" id="pendingRequests">0</p>
+                    <p class="text-xs font-medium text-gray-500 mt-1">รอตรวจ</p>
+                </div>
+                <div class="bg-white p-4 rounded-2xl shadow-sm border border-slate-200 text-center border-l-4 border-l-emerald-500">
+                    <p class="text-3xl font-bold text-emerald-600" id="completedRequests">0</p>
+                    <p class="text-xs font-medium text-gray-500 mt-1">เก็บแล้ว/อนุมัติ</p>
+                </div>
+                <div class="bg-white p-4 rounded-2xl shadow-sm border border-slate-200 text-center border-l-4 border-l-purple-500">
+                    <p class="text-3xl font-bold text-purple-600" id="totalWeight">0</p>
+                    <p class="text-xs font-medium text-gray-500 mt-1">จำนวนชิ้นรวม</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- แท็บ -->
+        <div class="flex gap-2 border-b border-gray-300">
+            <button id="tabListBtn" onclick="showTab('list')" class="px-4 py-2.5 text-sm font-bold rounded-t-xl transition">📑 รายการคำขอ</button>
+            <button id="tabPlanBtn" onclick="showTab('plan')" class="px-4 py-2.5 text-sm font-bold rounded-t-xl transition">🗺️ แผนเก็บรายวัน</button>
+        </div>
+
+        <div id="listView">
+        <div class="bg-white rounded-2xl shadow-md p-6 border border-slate-200/80">
+            <div class="flex flex-wrap justify-between items-center gap-2 mb-4 border-b pb-3 border-gray-100">
+                <h2 class="text-base font-bold text-gray-800 flex items-center space-x-2">
+                    <span>📑</span>
+                    <span>รายการคำขอจากประชาชน</span>
+                </h2>
+                <div class="flex flex-wrap gap-2">
+                    <button onclick="exportCSV()" class="text-xs bg-blue-50 hover:bg-blue-100 text-blue-700 font-semibold px-3 py-2 rounded-xl transition border border-blue-200">
+                        ⬇️ ส่งออก Excel (CSV)
+                    </button>
+                    <button onclick="printWorksheet()" class="text-xs bg-purple-50 hover:bg-purple-100 text-purple-700 font-semibold px-3 py-2 rounded-xl transition border border-purple-200">
+                        🖨️ พิมพ์ใบงาน
+                    </button>
+                    <button onclick="fetchRequests()" class="text-xs bg-emerald-50 hover:bg-emerald-100 text-emerald-700 font-semibold px-3 py-2 rounded-xl transition border border-emerald-200">
+                        🔄 รีเฟรชข้อมูล
+                    </button>
+                </div>
+            </div>
+
+            <!-- ตัวกรอง -->
+            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 mb-3">
+                <input type="search" id="searchInput" oninput="applyFilters()" placeholder="🔍 ค้นหาชื่อ / เบอร์ / รหัส / ที่อยู่" class="p-2.5 text-sm bg-slate-50 border border-gray-300 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:bg-white focus:outline-none">
+                <select id="filterStatus" onchange="applyFilters()" class="p-2.5 text-sm bg-slate-50 border border-gray-300 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:bg-white focus:outline-none">
+                    <option value="">ทุกสถานะ</option>
+                    <option value="รอตรวจ">⏳ รอตรวจ</option>
+                    <option value="นัดหมายแล้ว">📅 นัดหมายแล้ว</option>
+                    <option value="เก็บแล้ว">✅ เก็บแล้ว</option>
+                    <option value="ไม่รับ">❌ ไม่รับ</option>
+                </select>
+                <select id="filterZone" onchange="applyFilters()" class="p-2.5 text-sm bg-slate-50 border border-gray-300 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:bg-white focus:outline-none">
+                    <option value="">ทุกชุมชน</option>
+                </select>
+                <div class="flex gap-2">
+                    <input type="date" id="filterDate" onchange="applyFilters()" class="flex-1 min-w-0 p-2.5 text-sm bg-slate-50 border border-gray-300 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:bg-white focus:outline-none">
+                    <button onclick="setToday()" class="text-xs bg-slate-100 hover:bg-slate-200 border border-gray-300 rounded-xl px-2.5 font-semibold text-gray-700 whitespace-nowrap">วันนี้</button>
+                </div>
+            </div>
+            <div class="flex justify-between items-center mb-4">
+                <p id="resultInfo" class="text-xs text-gray-500"></p>
+                <button onclick="clearFilters()" class="text-xs text-gray-500 hover:text-gray-800 underline">ล้างตัวกรอง</button>
+            </div>
+
+            <div id="requestListContainer" class="space-y-4">
+                <p class="text-center text-gray-500 py-8">กำลังโหลดข้อมูล...</p>
+            </div>
+        </div>
+        </div><!-- /listView -->
+
+        <!-- ===== แผนเก็บรายวัน ===== -->
+        <div id="planView" class="hidden space-y-5">
+
+            <div class="bg-white rounded-2xl shadow-md p-5 border border-slate-200/80 space-y-3">
+                <div class="flex flex-wrap items-center gap-3">
+                    <label class="text-sm font-semibold text-gray-700">วันที่เก็บ</label>
+                    <input type="date" id="planDate" onchange="renderPlan()" class="p-2.5 text-sm bg-slate-50 border border-gray-300 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:outline-none">
+                    <button onclick="selectPlanDate(todayStr())" class="text-xs bg-slate-100 hover:bg-slate-200 border border-gray-300 rounded-xl px-3 py-2.5 font-semibold text-gray-700">วันนี้</button>
+                    <label class="flex items-center gap-2 text-sm text-gray-600 cursor-pointer">
+                        <input type="checkbox" id="planIncludePending" onchange="renderPlan()" class="w-4 h-4 accent-emerald-600">
+                        รวมคำขอที่ยังรอตรวจ
+                    </label>
+                </div>
+                <p id="planHint" class="text-xs text-amber-700"></p>
+                <div>
+                    <p class="text-xs font-semibold text-gray-500 mb-2">7 วันข้างหน้า (กดเพื่อเลือกวัน)</p>
+                    <div id="weekStrip" class="flex gap-2 overflow-x-auto pb-1"></div>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <div class="bg-white p-4 rounded-2xl shadow-sm border border-slate-200 text-center border-l-4 border-l-blue-500">
+                    <p class="text-3xl font-bold text-blue-700" id="planStops">0</p>
+                    <p class="text-xs font-medium text-gray-500 mt-1">จุดที่ต้องไปเก็บ</p>
+                </div>
+                <div class="bg-white p-4 rounded-2xl shadow-sm border border-slate-200 text-center border-l-4 border-l-purple-500">
+                    <p class="text-3xl font-bold text-purple-700" id="planPieces">0</p>
+                    <p class="text-xs font-medium text-gray-500 mt-1">ชิ้นที่ต้องเก็บ</p>
+                </div>
+                <div class="bg-white p-4 rounded-2xl shadow-sm border border-slate-200 text-center border-l-4 border-l-emerald-500">
+                    <p class="text-3xl font-bold text-emerald-700" id="planDone">0/0</p>
+                    <p class="text-xs font-medium text-gray-500 mt-1">เก็บแล้ว / จุดทั้งหมด</p>
+                </div>
+                <div class="bg-white p-4 rounded-2xl shadow-sm border border-slate-200 text-center border-l-4 border-l-amber-500">
+                    <p class="text-3xl font-bold text-amber-700" id="planDrop">0</p>
+                    <p class="text-xs font-medium text-gray-500 mt-1">นำมาทิ้งที่จุดนัด (ราย)</p>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
+                <div class="bg-white rounded-2xl shadow-md p-5 border border-slate-200/80">
+                    <h3 class="text-sm font-bold text-gray-800 mb-3">🏘️ สรุปตามชุมชน</h3>
+                    <div id="zoneSummary" class="overflow-x-auto"></div>
+                </div>
+                <div class="bg-white rounded-2xl shadow-md p-5 border border-slate-200/80">
+                    <h3 class="text-sm font-bold text-gray-800 mb-3">📦 สรุปตามประเภทสิ่งของ</h3>
+                    <div id="typeSummary" class="overflow-x-auto"></div>
+                </div>
+            </div>
+
+            <div class="bg-white rounded-2xl shadow-md p-5 border border-slate-200/80 space-y-3">
+                <div class="flex flex-wrap justify-between items-center gap-2">
+                    <h3 class="text-sm font-bold text-gray-800">🗺️ แผนที่จุดเก็บ (รถไปรับถึงบ้าน)</h3>
+                    <p class="text-xs text-gray-500">🏢 ลากหมุดจุดเริ่มต้นเพื่อย้าย ระบบจะเรียงลำดับใหม่ให้</p>
+                </div>
+                <div id="planMap" class="relative z-0 w-full rounded-xl border border-gray-300" style="height: 420px;"></div>
+                <div class="flex flex-wrap gap-3 text-xs text-gray-600">
+                    <span><span style="display:inline-block;width:12px;height:12px;border-radius:50%;background:#2563eb;"></span> นัดหมายแล้ว</span>
+                    <span><span style="display:inline-block;width:12px;height:12px;border-radius:50%;background:#d97706;"></span> รอตรวจ</span>
+                    <span><span style="display:inline-block;width:12px;height:12px;border-radius:50%;background:#059669;"></span> เก็บแล้ว</span>
+                </div>
+                <p id="planDistance" class="text-xs text-gray-500"></p>
+                <div id="mapsLinks" class="flex flex-wrap gap-2"></div>
+            </div>
+
+            <div class="bg-white rounded-2xl shadow-md p-5 border border-slate-200/80">
+                <div class="flex flex-wrap justify-between items-center gap-2 mb-3">
+                    <h3 class="text-sm font-bold text-gray-800">🚚 ลำดับจุดเก็บที่แนะนำ</h3>
+                    <button onclick="printPlan()" class="text-xs bg-purple-50 hover:bg-purple-100 text-purple-700 font-semibold px-3 py-2 rounded-xl transition border border-purple-200">
+                        🖨️ พิมพ์ใบงานเส้นทาง
+                    </button>
+                </div>
+                <div id="stopList" class="space-y-3"></div>
+            </div>
+        </div><!-- /planView -->
+    </main>
+
+    <!-- ใบงานสำหรับพิมพ์ -->
+    <div id="printArea"></div>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script>
+        // โลโก้ฝังในไฟล์ ไม่ต้องอัปโหลดไฟล์รูปแยก
+        const LOGO_SRC = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAKAAAACgCAMAAAC8EZcfAAADAFBMVEXkWmDwqCDi5N2hrLHy22BmdJwnV5DdI1UmVZLpplvx3JhPcZ5ujawpk6CqbaBOdJ2Nl7mu0ukzZqEhVJqkkyZvna713x9niq3NzdbocizOrctZZG7soJVGcJpjntSTrbjjMoHvaZsCPYxvmc6ctMajqM44XHylsFG2ys7X17cIYTUIbsIkjWtgX1uPOE+6Q3qpqXb/q2j//wD//38Af/88s9xokrN8wEt///+3PYCmvMOHwT660tAHPn8AP78wUnslUH4ITXofkTg+we9j1PaWfQuff1/cKT/3//P8/fwAAAAOSJNLtOUHcrhwxeqnlDJxpkPr58/S6vbtV5QMaK8TU5iV1fCjjCfvd6jrSIrPxpG0pVPa1a4EaDfZJmkPWaPlKXLtZJu24vSo2vLEt3atm0bW8vvxhrHvaqKFzOzlNnnqOoSciBnr6+09suROeKliveji27hxpj16tEQnWZe5rGazxtfWNXOhiRoyZ6X+/vyMqMZPljr0psb2t9HHvIbM2ORqibWdiSS9s2zVzKU2hjnylboIaU4zZJpzlrkJc8KWtM0UdTfXF1zaHGKmutEmejgAP39Vwu0DanD46BcAVapYg7D51uUDbI6Et0QPRozk3MXz8toAAP95szz3xdoSdUdSmEPI1dn36CsricZxmMX2nMEAf388ruHo47gAVVUzltErd7U6ptFVqqpspNARSIlPqtlGruIRR40+fn5EjDh5fX0sWY7PRno+Pn0oWqHqiDAHV3IQdW1VVapCbKNnnkOuZJjSVov4y+EAAH8FPo4Lc48tlI6JwkPRR4bTiK/kG2knlkdSl8qSd6q1SIX26U8XhksupElmnDzVJ1b0xS0CPIoRhTcmU4wpVY9XoTyFuT40hkOTaqODm8byxBkQR4xCbZxGcp5Jc6Rao0VHsdy6OnjTZJTTmbvV0Zz59Cn19ZYA//86Z5knekZUeqZ/f/+Op7msVZDQc5nReaPGwHrwmC4AAFUTSZQDXVEnVZEukTczo5hRe6RHjEJvs9wy/tmkAAABAHRSTlP//yYi/xyT/2H//1Nm//+h/v4a5P8b/5X9//8V/8f/Uv//rlxT/yf/YBH///////8IBAECAv/j/wL/OP+AggREif//////CP9A/gD+/////////v///v////////////7////+/////////////v/+//////v//f///gb+//////3+////////+/7//f////3/BP///wP+////0f//Af/////9///+/wL//wP///8D/7H//5EE/wgy/wT+////A/7/////AvD/////////////////////z/9rr//////+/23++9L//////////wHP/5ECU///////A0r/Sf//sf//nzmdtgAAJp9JREFUeNq9fQdgE1e67hgIBBI6SUgvb7O977333fJ6l8ZmPJYVWTOSLIGEjWxFyJYsS5abbNkGVzAYXAAbYohDTQiEmgRICIQEyAbSe930Td9NdpP7/+dMVbENSd7ZjS3NjM988/39zDkHxnjxbcuK1fTDnDl/eWX3Lbc89dTDpD311FO37P7Pr/xlzhXk7LoVK7Zc/E2Yi/3D1SvwZ3TOX3bf8hTLFrZE/PXDVVWtrVWtVVU7h3v8kaCZZZ+6BWBSkFv+vwJcjdRF73tl11OsOdKzs2JjniG15W3sHPZHAOVuCvLiMDIXI1n4ccVfdvexB/xVFT7D6C2vYpnfzO565T7C47ofHuDqfzAaJ166+2FzZFmFYZzNV1EfYZ8iGFdv+WEBomjvA+4iVRuTUfAeQWzIDLJiOMLe8sol0MVdPxxAhHfpLjayrC759oFGm7tUnCeOSmRnj5ndDTRuueuHAbgaZdvH+ltTb83HOc4jerjQWApZFWF3IcQt3z/Au9YZf/tKn7lndto79w9QZRtbHzsB4lfwtOu+X4DrgD5gr2fjaPe2CQL+anS7baNC9BMWV3yfAKGzr0C4dRluyYeI8omlItpK3MPFPXzaJ7ApLO7+MQjl+wK45SHjnN2sf366e9aKboPh80pLAC3F4kaAjYCE89DTAieqUG2lnPwRdPHS342LRGZc9D3DBqvScjfgqQRQhpAFueEtSGStR5xvcJcSaRtEzuJRieY4Ba1vGduH1vLdAYL2/XgXW5+s/v1usQFB2ZA1g1BKAHIifvRYaoEsNwi+38AbQniq0UOItHGcWwhJerzxNXb3/xmbRGZs3/IMeyAlZjTEPaIFWeKJMAVKmAdEOI/j+33gd9zAok0+FeAslLtaD6eq50tmIHEsc2bGEu+1u9ieFO8hVsJdR4jERPyhABwwcMReAgDwHXKQAoyTow3wcUDT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';
+        const LOGO_ICON = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAMAAACdt4HsAAADAFBMVEXvoVvz5WPvpC7odUfuX6X+9Qz//3/txKL7/PsAAABKtebPxpHr59AKabAKSZQHc7luxevDt3Tb1K62p1bT6PUSU5npSInrV5MOWaXi27mV1fDK2enjKHBPeKuKp8nIvYLmNnlupUFvpjrtZZpylLvxd6hMdqhUlzuXtNKwxNrV9/3r6+wAVapnibW7rWLwhbAOdIwvZqVOlkR2msWJzOut2O604/XWzqIyhjsmWJVUwu0GcsI9teenudQDaTe9sWroOoPwaqL1ttEAAP8BPX0SR4o1Y5pagbBFruLTSIjxlboHZ44Af38oW5o2iFJku+avnUUWdDk/P38/f78sebhVVarzqsb2xdoAKHQRSYoTd3QqWpMnh206ptN/f39np9V6sjrj3sH///8AAU01lc1EikmEtUGolDW2zOLXN3j61uQAADAAFWYZS4gPaHYyYp0uicWdaqKMhLexYpvVVY7TY5fNe6npGWzwxlH69NsAAH8AKXcCOoQRSIQNWm0aUpQdUI8zZJs6aaUveFQ9reNVqqqFuT2tXJPVpcTkdnMAJ3IFPIcJTKERhU0jezkne2Ypgb4llk9DbqZCjT1SmsxcoTtWpdhiibRxjcB1skJ50vCmea7Qha7RtM7KyNnD0N/kWGfuqGftszfz2zX26DIABl0ABWcAMnsDNnwGN34WR3wAVVUFak8rVXs9ap4/f38pl3w9wfRBbaRLeKtagq5cpUFf1Pd4stuRe7SFnbCBnsKb4/qqVaqrh7W18f3eHmfcJWfSwXra0JzmQnrnbEfoaHXsiWPrgZLum0v1nMXvqSvyzTT02lH66Rb59zf3+1IAGWYALnoALIYJOIQDP5AZTGYMQH8AbsUedVEeg38A//8qW4wjV5IwX6I1YZA6a6EhfYkun4EzmKAts8pVVVVEbZ1Fbp5Eb6BWgK5NicFGnH9Cn5xVqv9EsN5inUaEWHSbiBuRvuC4X6K8bKGkjSeqqqq1rtGjveDNPIPMQHbRdJ7azeD/AADmD2LjQVviU1yAcIFgAAABAHRSTlP///////8C//4A//7+//////7+/v7//////v////z9/v/////5/9D//////wP2///////6/////v+Q///////+////AQdurvr/////Av//////BAT/A///SUz/rv//Av///wEa/////////xEziv///////////////wIxWTb/dIuUvP//A/////8Vav////////X/////0v////////////////8nLTNLbisD/xPHBP//srjY///////7/wP///////3/////////////////CmJKG/8Kev///wFOev9MxP////8DVr/Cvf///wP//////////wP///////8B/////Qe0qQAACelJREFUeNqFVwV4G0cW3vRoVgvWCnYlCy22FVkUg+yYYztmO3FtxxBTHNthpgYv3KRJ04aZitf2rniFKzMfMzMz83uzkuyck+v7vONdzbx/Hs2b9xh2Ks0agmH489se8YXi8afjnsceTWy+CyfmVk1dzEz55WZ47t72U3u2gaQpaLGf2HELTOyu+iCA6fBsftSuMuskPT+Bkn2ieljFvzFA1W6WPXAiL8Vi5jkYJiAMnsRilm28McAnWLbLZ0mu5ginI3qekySeIBAhEkJUg41uBDCLXZwIUGae44hkHpSIxEs6HQBJOsAokAoIsfjuZn95fYC57BJf0nCOQT1nBgzCcfAUSARQOOLQ0cn4AXao6joAn2Q/F6e7O3J52LmMzzWPcqCCowwgyniQX8+jCLoXSxIsu2kKwFz2yyg+rzMTvkwnBct0L23ciIA4oDVAGvpCysyGngkEJs2/NJt6HB0ncQ60Wrb9pM12hy0Uzw6CMyQJmAHErAdb1qS1SALMYe9DfrNEeJjnzSRojxqbbCE7kMfWZFzusSA3TrZiaIAMf5oMMJ3tCqD4RK+aymITo3bLpAAI2ERbNjE7eDAE74BfLEth0zRAI7vEg5rqEQGmQ2LtJO5UEIk2A2pHRiWq3300alWAz7A+DFxHAQigI9lidAo7ASsYbKId/AkO/mMBenMJjUmGHp+lyME5JBCQxGEZMRhycuiDf/v+AQO8kYBoQz11EsV8CDamANPZJXYMPl5q5VD8MWBHAt59OZZzOWfXj1vg7fw5+KEpSkgBBIceDXWA3U0Bhtga3J/Tc6BcyJiXo/Ib1p47+691dda/O+XyNWvXw9v5dftyosuJGVYGOfBFaHhoEwCoHtCBg/QFxCPmGfIpPXd2vdPptjrLrYrX67TKVlkZtzrH8qM2MqijziaGpSACw36UfQgt2JqLphVn5Oche15+niwr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';
+        document.querySelectorAll('img[data-logo]').forEach(function (el) { el.src = LOGO_SRC; });
+        (function () { var l = document.createElement('link'); l.rel = 'icon'; l.type = 'image/png'; l.href = LOGO_ICON; document.head.appendChild(l); })();
+
+        const SUPABASE_URL = 'https://xrahdbxhlyiccijewpwu.supabase.co';
+        const SUPABASE_ANON_KEY = 'sb_publishable_oB5FatDYsZIqAn7iP2ytPw_v0RGWyYs';
+        const TABLE_NAME = 'waste_requests';
+
+        const _supabase = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+        let allData = [];
+        let filteredData = [];
+
+        // ---------- ระบบล็อกอิน (Supabase Auth) ----------
+        let currentUserId = null;
+
+        function showView(session) {
+            const loginView = document.getElementById('loginView');
+            const appMain = document.getElementById('appMain');
+            const logoutBtn = document.getElementById('logoutBtn');
+            const userEmail = document.getElementById('userEmail');
+
+            if (session) {
+                loginView.classList.add('hidden');
+                appMain.classList.remove('hidden');
+                logoutBtn.classList.remove('hidden');
+                userEmail.innerText = session.user.email || '';
+                if (!document.getElementById('planDate').value) document.getElementById('planDate').value = todayStr();
+                if (currentUserId !== session.user.id) {
+                    currentUserId = session.user.id;
+                    fetchRequests();
+                }
+            } else {
+                currentUserId = null;
+                allData = [];
+                filteredData = [];
+                appMain.classList.add('hidden');
+                logoutBtn.classList.add('hidden');
+                userEmail.innerText = '';
+                document.getElementById('requestListContainer').innerHTML = '';
+                document.getElementById('printArea').innerHTML = '';
+                clearPlanMap();
+                showTab('list');
+                loginView.classList.remove('hidden');
+            }
+        }
+
+        async function login(e) {
+            e.preventDefault();
+            const email = document.getElementById('loginEmail').value.trim();
+            const password = document.getElementById('loginPassword').value;
+            const errBox = document.getElementById('loginError');
+            const btn = document.getElementById('loginBtn');
+
+            errBox.classList.add('hidden');
+            btn.disabled = true;
+            btn.innerText = 'กำลังเข้าสู่ระบบ...';
+
+            const { error } = await _supabase.auth.signInWithPassword({ email, password });
+
+            btn.disabled = false;
+            btn.innerText = 'เข้าสู่ระบบ';
+
+            if (error) {
+                console.error(error);
+                errBox.innerText = 'อีเมลหรือรหัสผ่านไม่ถูกต้อง';
+                errBox.classList.remove('hidden');
+                return;
+            }
+            document.getElementById('loginPassword').value = '';
+        }
+
+        async function logout() {
+            await _supabase.auth.signOut();
+        }
+
+        _supabase.auth.onAuthStateChange((event, session) => {
+            showView(session);
+        });
+
+        window.onload = async function () {
+            showTab('list');
+            const { data: { session } } = await _supabase.auth.getSession();
+            showView(session);
+        };
+
+        // ---------- เครื่องมือช่วย ----------
+        function esc(v) {
+            return String(v ?? '').replace(/[&<>"']/g, c => ({
+                '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+            }[c]));
+        }
+
+        function fmtDateTime(v) {
+            if (!v) return '';
+            const d = new Date(v);
+            if (isNaN(d)) return '';
+            return d.toLocaleString('th-TH', {
+                timeZone: 'Asia/Bangkok',
+                day: 'numeric', month: 'short', year: '2-digit',
+                hour: '2-digit', minute: '2-digit'
+            });
+        }
+
+        function statusOf(item) {
+            return item['สถานะคำขอ'] || 'รอตรวจ';
+        }
+
+        // ---------- ดึงข้อมูล ----------
+        async function fetchRequests() {
+            const container = document.getElementById('requestListContainer');
+            container.innerHTML = '<p class="text-center text-gray-500 py-8">กำลังโหลดข้อมูล...</p>';
+
+            try {
+                const { data, error } = await _supabase
+                    .from(TABLE_NAME)
+                    .select('*')
+                    .order('ID', { ascending: false });
+
+                if (error) {
+                    console.error(error);
+                    container.innerHTML = `<div class="p-4 bg-red-50 border border-red-200 rounded-xl text-red-700 text-sm"><p class="font-bold">เกิดข้อผิดพลาดในการดึงข้อมูล:</p><p>${esc(error.message)}</p></div>`;
+                    return;
+                }
+
+                allData = data || [];
+                updateDashboardCards(allData);
+                rebuildZoneOptions();
+                applyFilters();
+                if (currentTab === 'plan') renderPlan();
+            } catch (err) {
+                console.error(err);
+                container.innerHTML = `<p class="text-red-500 text-center py-4">เกิดข้อผิดพลาดในการเชื่อมต่อ: ${esc(err.message)}</p>`;
+            }
+        }
+
+        function updateDashboardCards(data) {
+            document.getElementById('totalRequests').innerText = data.length;
+            document.getElementById('pendingRequests').innerText =
+                data.filter(i => statusOf(i) === 'รอตรวจ').length;
+            document.getElementById('completedRequests').innerText =
+                data.filter(i => ['เก็บแล้ว', 'นัดหมายแล้ว'].includes(statusOf(i))).length;
+            document.getElementById('totalWeight').innerText =
+                data.reduce((sum, i) => sum + (Number(i['จำนวนชิ้น']) || 1), 0);
+        }
+
+        function rebuildZoneOptions() {
+            const sel = document.getElementById('filterZone');
+            const keep = sel.value;
+            const zones = [...new Set(allData.map(i => i['โซนพื้นที่']).filter(Boolean))]
+                .sort((a, b) => a.localeCompare(b, 'th'));
+            sel.innerHTML = '<option value="">ทุกชุมชน</option>' +
+                zones.map(z => `<option value="${esc(z)}">${esc(z)}</option>`).join('');
+            if (zones.includes(keep)) sel.value = keep;
+        }
+
+        // ---------- ค้นหา / กรอง ----------
+        function applyFilters() {
+            const q = document.getElementById('searchInput').value.trim().toLowerCase();
+            const qDigits = q.replace(/\D/g, '');
+            const st = document.getElementById('filterStatus').value;
+            const zone = document.getElementById('filterZone').value;
+            const date = document.getElementById('filterDate').value;
+
+            filteredData = allData.filter(i => {
+                if (st && statusOf(i) !== st) return false;
+                if (zone && i['โซนพื้นที่'] !== zone) return false;
+                if (date && i['วันนัดหมาย'] !== date) return false;
+                if (q) {
+                    const hay = [i['ชื่อผู้ขอ'], i['รหัสคำขอ'], i['เบอร์โทรศัพท์'], i['ที่อยู่และจุดวางขยะ']]
+                        .join(' ').toLowerCase();
+                    const phoneDigits = String(i['เบอร์โทรศัพท์'] || '').replace(/\D/g, '');
+                    const phoneHit = qDigits.length >= 3 && phoneDigits.includes(qDigits);
+                    if (!hay.includes(q) && !phoneHit) return false;
+                }
+                return true;
+            });
+
+            document.getElementById('resultInfo').innerText =
+                `แสดง ${filteredData.length} จาก ${allData.length} รายการ`;
+            renderRequestList(filteredData);
+        }
+
+        function clearFilters() {
+            document.getElementById('searchInput').value = '';
+            document.getElementById('filterStatus').value = '';
+            document.getElementById('filterZone').value = '';
+            document.getElementById('filterDate').value = '';
+            applyFilters();
+        }
+
+        function setToday() {
+            document.getElementById('filterDate').value = todayStr();
+            applyFilters();
+        }
+
+        // ---------- แสดงรายการ ----------
+        function renderRequestList(data) {
+            const container = document.getElementById('requestListContainer');
+            container.innerHTML = '';
+
+            if (allData.length === 0) {
+                container.innerHTML = '<p class="text-center text-gray-400 py-12">ยังไม่มีรายการคำขอส่งเข้ามาในระบบ<br><span class="text-xs">(ถ้ามีข้อมูลในตารางแต่ขึ้นข้อความนี้ แปลว่า RLS ยังไม่มี policy แบบ SELECT)</span></p>';
+                return;
+            }
+            if (data.length === 0) {
+                container.innerHTML = '<p class="text-center text-gray-400 py-12">ไม่พบรายการตามเงื่อนไขที่เลือก</p>';
+                return;
+            }
+
+            data.forEach(item => {
+                const card = document.createElement('div');
+                card.className = "border border-slate-200 rounded-xl p-4 bg-slate-50 hover:bg-white transition shadow-sm space-y-2";
+
+                const itemId = item['ID'];
+                const reqCode = item['รหัสคำขอ'] || `BK-${itemId}`;
+                const name = item['ชื่อผู้ขอ'] || 'ไม่ระบุชื่อ';
+                const phone = item['เบอร์โทรศัพท์'] || '-';
+                const zone = item['โซนพื้นที่'] || '-';
+                const address = item['ที่อยู่และจุดวางขยะ'] || '-';
+                const mapPos = item['พิกัดแผนที่'] || '';
+                const wasteType = item['ประเภทขยะ'] || '-';
+                const qty = item['จำนวนชิ้น'] || 1;
+                const appDate = item['วันนัดหมาย'] || '-';
+                const method = item['วิธีการส่ง'] || '-';
+                const status = statusOf(item);
+                const created = fmtDateTime(item['created_at']);
+
+                let statusBadge = '';
+                if (status === 'รอตรวจ') {
+                    statusBadge = `<span class="bg-amber-100 text-amber-800 text-xs px-2.5 py-1 rounded-full font-bold">⏳ รอตรวจ</span>`;
+                } else if (status === 'นัดหมายแล้ว') {
+                    statusBadge = `<span class="bg-blue-100 text-blue-800 text-xs px-2.5 py-1 rounded-full font-bold">📅 นัดหมายแล้ว</span>`;
+                } else if (status === 'เก็บแล้ว') {
+                    statusBadge = `<span class="bg-emerald-100 text-emerald-800 text-xs px-2.5 py-1 rounded-full font-bold">✅ เก็บเรียบร้อย</span>`;
+                } else {
+                    statusBadge = `<span class="bg-red-100 text-red-800 text-xs px-2.5 py-1 rounded-full font-bold">❌ ไม่รับ</span>`;
+                }
+
+                const mapLink = mapPos
+                    ? `<a href="https://www.google.com/maps?q=${encodeURIComponent(mapPos)}" target="_blank" rel="noopener" class="text-emerald-700 underline">เปิดแผนที่</a>`
+                    : '';
+
+                card.innerHTML = `
+                    <div class="flex justify-between items-center pb-2 border-b border-gray-200">
+                        <div class="flex items-center space-x-2">
+                            <span class="font-bold text-emerald-800 text-sm bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">${esc(reqCode)}</span>
+                            <span class="font-semibold text-gray-800 text-base">${esc(name)}</span>
+                        </div>
+                        ${statusBadge}
+                    </div>
+
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-2 text-sm text-gray-600 pt-1">
+                        <p>📍 <strong>วิธีทิ้ง/ชุมชน:</strong> ${esc(method)} | ${esc(zone)}</p>
+                        <p>📦 <strong>สิ่งของ:</strong> ${esc(wasteType)} (${esc(qty)} ชิ้น)</p>
+                        <p>📅 <strong>วันนัดเก็บ:</strong> <span class="font-bold text-gray-800">${esc(appDate)}</span></p>
+                        <p>📞 <strong>เบอร์โทร:</strong> <a href="tel:${esc(phone)}" class="text-emerald-700 underline">${esc(phone)}</a></p>
+                    </div>
+
+                    <p class="text-xs text-gray-500 bg-white p-2.5 rounded-lg border border-gray-200">
+                        🏠 <strong>จุดวางขยะ/ที่อยู่:</strong> ${esc(address)} ${mapLink}
+                    </p>
+                    ${created ? `<p class="text-xs text-gray-400">🕒 ส่งคำขอเมื่อ ${esc(created)}</p>` : ''}
+
+                    ${status === 'รอตรวจ' ? `
+                        <div class="flex gap-2 mt-3 pt-2 border-t border-gray-200">
+                            <button onclick="updateStatus(${Number(itemId)}, 'นัดหมายแล้ว')" class="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold px-4 py-2 rounded-xl transition shadow-sm">
+                                ✓ อนุมัตินัดหมาย
+                            </button>
+                            <button onclick="updateStatus(${Number(itemId)}, 'ไม่รับ')" class="bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 text-xs font-bold px-4 py-2 rounded-xl transition">
+                                ✕ ไม่รับรายการ
+                            </button>
+                        </div>
+                    ` : status === 'นัดหมายแล้ว' ? `
+                        <div class="flex gap-2 mt-3 pt-2 border-t border-gray-200">
+                            <button onclick="updateStatus(${Number(itemId)}, 'เก็บแล้ว')" class="bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold px-4 py-2 rounded-xl transition shadow-sm">
+                                ✅ เก็บเรียบร้อยแล้ว
+                            </button>
+                        </div>
+                    ` : ''}
+                `;
+                container.appendChild(card);
+            });
+        }
+
+        async function updateStatus(id, newStatus) {
+            if (!confirm(`คุณต้องการเปลี่ยนสถานะรายการนี้เป็น "${newStatus}" ใช่หรือไม่?`)) return;
+
+            const { data, error } = await _supabase
+                .from(TABLE_NAME)
+                .update({ 'สถานะคำขอ': newStatus })
+                .eq('ID', id)
+                .select();
+
+            if (error) {
+                alert('เกิดข้อผิดพลาดในการอัปเดต: ' + error.message);
+            } else if (!data || data.length === 0) {
+                alert('อัปเดตไม่สำเร็จ (0 แถว) น่าจะยังไม่มี RLS policy แบบ UPDATE ในตาราง waste_requests');
+            } else {
+                fetchRequests();
+            }
+        }
+
+
+        // =====================================================
+        //  แผนเก็บรายวัน (สรุป + แผนที่ + ลำดับเส้นทาง)
+        // =====================================================
+        function ymd(d) {
+            return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+        }
+        function todayStr() { return ymd(new Date()); }
+
+        const TAB_ACTIVE = 'px-4 py-2.5 text-sm font-bold rounded-t-xl transition bg-white text-emerald-800 border border-b-white border-gray-300 -mb-px';
+        const TAB_IDLE = 'px-4 py-2.5 text-sm font-bold rounded-t-xl transition text-gray-500 hover:text-gray-800';
+        let currentTab = 'list';
+
+        let planMap = null, planLayer = null, depotMarker = null;
+        let planOrdered = [];   // จุดที่ต้องไปเก็บ เรียงตามลำดับแนะนำ
+        let planNoCoord = [];   // คำขอที่ไม่มีพิกัด
+        let planDoneItems = []; // เก็บแล้ว
+        let planDepot = null;
+
+        function isDropoff(item) {
+            return String(item['วิธีการส่ง'] || '').includes('จุดนัด');
+        }
+
+        function parseCoord(str) {
+            const parts = String(str || '').split(',').map(x => parseFloat(x.trim()));
+            if (parts.length !== 2 || parts.some(isNaN)) return null;
+            const lat = parts[0], lng = parts[1];
+            if (lat < -90 || lat > 90 || lng < -180 || lng > 180) return null;
+            return { lat, lng };
+        }
+
+        function haversine(a, b) {
+            const R = 6371, rad = Math.PI / 180;
+            const dLat = (b.lat - a.lat) * rad, dLng = (b.lng - a.lng) * rad;
+            const h = Math.sin(dLat / 2) ** 2 +
+                Math.cos(a.lat * rad) * Math.cos(b.lat * rad) * Math.sin(dLng / 2) ** 2;
+            return 2 * R * Math.asin(Math.sqrt(h));
+        }
+
+        // เรียงจุดแบบ "ใกล้สุดก่อน" เริ่มจากจุดเริ่มต้น (ประมาณการด้วยระยะเส้นตรง)
+        function orderByNearest(stops, start) {
+            const remaining = stops.slice();
+            const out = [];
+            let cur = start;
+            while (remaining.length) {
+                let bi = 0, bd = Infinity;
+                for (let k = 0; k < remaining.length; k++) {
+                    const d = haversine(cur, remaining[k]);
+                    if (d < bd) { bd = d; bi = k; }
+                }
+                const nxt = remaining.splice(bi, 1)[0];
+                out.push(nxt);
+                cur = nxt;
+            }
+            return out;
+        }
+
+        function loadDepot() {
+            try {
+                const v = JSON.parse(localStorage.getItem('wasteDepot_buayai') || 'null');
+                if (v && typeof v.lat === 'number' && typeof v.lng === 'number') return v;
+            } catch (e) { /* ไม่เป็นไร */ }
+            return null;
+        }
+        function saveDepot(p) {
+            try { localStorage.setItem('wasteDepot_buayai', JSON.stringify(p)); } catch (e) { /* ไม่เป็นไร */ }
+        }
+
+        function showTab(tab) {
+            currentTab = tab;
+            document.getElementById('tabListBtn').className = tab === 'list' ? TAB_ACTIVE : TAB_IDLE;
+            document.getElementById('tabPlanBtn').className = tab === 'plan' ? TAB_ACTIVE : TAB_IDLE;
+            document.getElementById('listView').classList.toggle('hidden', tab !== 'list');
+            document.getElementById('planView').classList.toggle('hidden', tab !== 'plan');
+            if (tab === 'plan') {
+                if (!document.getElementById('planDate').value) document.getElementById('planDate').value = todayStr();
+                initPlanMap();
+                renderPlan();
+                // แผนที่ที่ซ่อนอยู่ต้องคำนวณขนาดใหม่หลังแสดง
+                setTimeout(() => {
+                    if (planMap) { planMap.invalidateSize(); fitPlanMap(); }
+                }, 80);
+            }
+        }
+
+        function selectPlanDate(ds) {
+            document.getElementById('planDate').value = ds;
+            renderPlan();
+            if (planMap) setTimeout(() => { planMap.invalidateSize(); fitPlanMap(); }, 50);
+        }
+
+        function initPlanMap() {
+            if (planMap) return;
+            if (typeof L === 'undefined') {
+                document.getElementById('planMap').innerHTML =
+                    '<p class="p-6 text-center text-sm text-red-600">โหลดแผนที่ไม่สำเร็จ กรุณาตรวจสอบอินเทอร์เน็ตแล้วรีเฟรชหน้า</p>';
+                return;
+            }
+            planMap = L.map('planMap').setView([15.585, 102.428], 13);
+            L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}', {
+                maxZoom: 19,
+                attribution: 'Tiles &copy; Esri'
+            }).addTo(planMap);
+            planLayer = L.layerGroup().addTo(planMap);
+        }
+
+        function clearPlanMap() {
+            if (planLayer) planLayer.clearLayers();
+            if (planMap && depotMarker) { planMap.removeLayer(depotMarker); depotMarker = null; }
+            planOrdered = []; planNoCoord = []; planDoneItems = [];
+        }
+
+        function fitPlanMap() {
+            if (!planMap) return;
+            const pts = planOrdered.map(s => [s.lat, s.lng]);
+            planDoneItems.forEach(s => { if (s.lat !== undefined) pts.push([s.lat, s.lng]); });
+            if (planDepot) pts.push([planDepot.lat, planDepot.lng]);
+            if (pts.length === 1) planMap.setView(pts[0], 15);
+            else if (pts.length > 1) planMap.fitBounds(pts, { padding: [30, 30] });
+        }
+
+        function numIcon(label, color) {
+            return L.divIcon({
+                className: '',
+                html: `<div style="background:${color};color:#fff;width:28px;height:28px;border-radius:50%;border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center;font:700 12px Sarabun,sans-serif;">${label}</div>`,
+                iconSize: [28, 28],
+                iconAnchor: [14, 14],
+                popupAnchor: [0, -14]
+            });
+        }
+
+        function stopPopup(item) {
+            return `<div style="font-family:Sarabun,sans-serif;font-size:13px;line-height:1.5">
+                <strong>${esc(item['ชื่อผู้ขอ'] || 'ไม่ระบุชื่อ')}</strong> (${esc(item['รหัสคำขอ'] || '')})<br>
+                ${esc(item['ประเภทขยะ'] || '-')} (${esc(item['จำนวนชิ้น'] || 1)} ชิ้น)<br>
+                ${esc(item['ที่อยู่และจุดวางขยะ'] || '-')}<br>
+                📞 ${esc(item['เบอร์โทรศัพท์'] || '-')}</div>`;
+        }
+
+        function renderPlan() {
+            const date = document.getElementById('planDate').value;
+            const includePending = document.getElementById('planIncludePending').checked;
+            renderWeekStrip();
+
+            if (!date) return;
+
+            const dayAll = allData.filter(i => i['วันนัดหมาย'] === date && statusOf(i) !== 'ไม่รับ');
+            const items = dayAll.filter(i => includePending || statusOf(i) !== 'รอตรวจ');
+            const pendingHidden = dayAll.length - items.length;
+            document.getElementById('planHint').innerText = pendingHidden > 0
+                ? `⚠️ วันนี้มีคำขอที่ยังรอตรวจอีก ${pendingHidden} รายการ (ยังไม่รวมในแผน) ไปที่แท็บ "รายการคำขอ" เพื่ออนุมัติ หรือติ๊ก "รวมคำขอที่ยังรอตรวจ"`
+                : '';
+
+            const pickups = items.filter(i => !isDropoff(i));
+            const dropoffs = items.filter(isDropoff);
+            const todo = pickups.filter(i => statusOf(i) !== 'เก็บแล้ว');
+            const done = pickups.filter(i => statusOf(i) === 'เก็บแล้ว');
+            const qtyOf = i => Number(i['จำนวนชิ้น']) || 1;
+
+            document.getElementById('planStops').innerText = todo.length;
+            document.getElementById('planPieces').innerText = todo.reduce((s, i) => s + qtyOf(i), 0);
+            document.getElementById('planDone').innerText = `${done.length}/${pickups.length}`;
+            document.getElementById('planDrop').innerText = dropoffs.length;
+
+            renderZoneSummary(items, qtyOf);
+            renderTypeSummary(items, qtyOf);
+
+            // ----- แผนที่และลำดับเส้นทาง -----
+            const withCoord = [], noCoord = [];
+            todo.forEach(i => {
+                const c = parseCoord(i['พิกัดแผนที่']);
+                if (c) withCoord.push({ item: i, lat: c.lat, lng: c.lng });
+                else noCoord.push(i);
+            });
+            const doneStops = [];
+            done.forEach(i => {
+                const c = parseCoord(i['พิกัดแผนที่']);
+                if (c) doneStops.push({ item: i, lat: c.lat, lng: c.lng });
+            });
+
+            // จุดเริ่มต้น: ค่าที่บันทึกไว้ หรือจุดกึ่งกลางของจุดเก็บ
+            planDepot = loadDepot();
+            if (!planDepot && withCoord.length) {
+                planDepot = {
+                    lat: withCoord.reduce((s, p) => s + p.lat, 0) / withCoord.length,
+                    lng: withCoord.reduce((s, p) => s + p.lng, 0) / withCoord.length
+                };
+            }
+
+            planOrdered = planDepot ? orderByNearest(withCoord, planDepot) : withCoord;
+            planNoCoord = noCoord;
+            planDoneItems = doneStops;
+
+            drawPlanMap();
+            renderMapsLinks();
+            renderStopList();
+        }
+
+        function drawPlanMap() {
+            if (!planMap || !planLayer) return;
+            planLayer.clearLayers();
+
+            const latlngs = planDepot ? [[planDepot.lat, planDepot.lng]] : [];
+            planOrdered.forEach((s, idx) => {
+                const color = statusOf(s.item) === 'รอตรวจ' ? '#d97706' : '#2563eb';
+                L.marker([s.lat, s.lng], { icon: numIcon(idx + 1, color) })
+                    .bindPopup(stopPopup(s.item))
+                    .addTo(planLayer);
+                latlngs.push([s.lat, s.lng]);
+            });
+            planDoneItems.forEach(s => {
+                L.marker([s.lat, s.lng], { icon: numIcon('✓', '#059669') })
+                    .bindPopup(stopPopup(s.item))
+                    .addTo(planLayer);
+            });
+            if (planOrdered.length > 0 && latlngs.length > 1) {
+                L.polyline(latlngs, { color: '#2563eb', weight: 3, opacity: 0.6, dashArray: '6 6' }).addTo(planLayer);
+            }
+
+            // หมุดจุดเริ่มต้น (ลากย้ายได้)
+            if (planDepot) {
+                if (!depotMarker) {
+                    depotMarker = L.marker([planDepot.lat, planDepot.lng], {
+                        draggable: true,
+                        icon: L.divIcon({
+                            className: '',
+                            html: '<div style="font-size:26px;line-height:28px;text-align:center;filter:drop-shadow(0 1px 2px rgba(0,0,0,.5))">🏢</div>',
+                            iconSize: [28, 28],
+                            iconAnchor: [14, 14]
+                        }),
+                        zIndexOffset: 1000
+                    }).addTo(planMap);
+                    depotMarker.bindTooltip('จุดเริ่มต้น (ลากเพื่อย้าย)');
+                    depotMarker.on('dragend', () => {
+                        const p = depotMarker.getLatLng();
+                        saveDepot({ lat: p.lat, lng: p.lng });
+                        renderPlan();
+                    });
+                } else {
+                    depotMarker.setLatLng([planDepot.lat, planDepot.lng]);
+                }
+            } else if (depotMarker) {
+                planMap.removeLayer(depotMarker);
+                depotMarker = null;
+            }
+
+            // ระยะทางเส้นตรงโดยประมาณ
+            let km = 0, cur = planDepot;
+            planOrdered.forEach(s => { if (cur) km += haversine(cur, s); cur = s; });
+            document.getElementById('planDistance').innerText = planOrdered.length > 0 && planDepot
+                ? `ระยะทางเส้นตรงโดยประมาณ ${km.toFixed(1)} กม. (ขาไปอย่างเดียว ไม่ใช่ระยะตามถนนจริง) ลำดับนี้เป็นเพียงข้อเสนอแนะ เจ้าหน้าที่ปรับตามหน้างานได้`
+                : '';
+        }
+
+        function renderMapsLinks() {
+            const box = document.getElementById('mapsLinks');
+            if (planOrdered.length === 0 || !planDepot) { box.innerHTML = ''; return; }
+            const size = 9;
+            let origin = planDepot;
+            const links = [];
+            for (let i = 0; i < planOrdered.length; i += size) {
+                const chunk = planOrdered.slice(i, i + size);
+                const dest = chunk[chunk.length - 1];
+                const wps = chunk.slice(0, -1).map(p => `${p.lat},${p.lng}`).join('|');
+                let url = 'https://www.google.com/maps/dir/?api=1&travelmode=driving' +
+                    '&origin=' + encodeURIComponent(`${origin.lat},${origin.lng}`) +
+                    '&destination=' + encodeURIComponent(`${dest.lat},${dest.lng}`);
+                if (wps) url += '&waypoints=' + encodeURIComponent(wps);
+                links.push(`<a href="${url}" target="_blank" rel="noopener" class="text-xs bg-blue-50 hover:bg-blue-100 text-blue-700 font-semibold px-3 py-2 rounded-xl border border-blue-200">🧭 เปิดนำทาง Google Maps (จุด ${i + 1}-${i + chunk.length})</a>`);
+                origin = dest;
+            }
+            box.innerHTML = links.join('');
+        }
+
+        function renderZoneSummary(items, qtyOf) {
+            const zones = {};
+            items.forEach(i => {
+                const z = i['โซนพื้นที่'] || 'ไม่ระบุ';
+                if (!zones[z]) zones[z] = { pick: 0, drop: 0, qty: 0 };
+                if (isDropoff(i)) zones[z].drop++; else zones[z].pick++;
+                zones[z].qty += qtyOf(i);
+            });
+            const names = Object.keys(zones).sort((a, b) => a.localeCompare(b, 'th'));
+            const box = document.getElementById('zoneSummary');
+            if (names.length === 0) {
+                box.innerHTML = '<p class="text-sm text-gray-400 py-4 text-center">ไม่มีรายการในวันนี้</p>';
+                return;
+            }
+            box.innerHTML = `<table class="w-full text-sm">
+                <thead><tr class="text-left text-xs text-gray-500 border-b">
+                    <th class="py-1.5 pr-2">ชุมชน</th><th class="py-1.5 px-2 text-center">รับถึงบ้าน</th>
+                    <th class="py-1.5 px-2 text-center">นำมาทิ้ง</th><th class="py-1.5 pl-2 text-right">ชิ้น</th>
+                </tr></thead><tbody>` +
+                names.map(n => `<tr class="border-b border-gray-100">
+                    <td class="py-1.5 pr-2">${esc(n)}</td>
+                    <td class="py-1.5 px-2 text-center font-semibold">${zones[n].pick}</td>
+                    <td class="py-1.5 px-2 text-center">${zones[n].drop}</td>
+                    <td class="py-1.5 pl-2 text-right font-semibold">${zones[n].qty}</td></tr>`).join('') +
+                '</tbody></table>';
+        }
+
+        function renderTypeSummary(items, qtyOf) {
+            const types = {};
+            items.forEach(i => {
+                const t = i['ประเภทขยะ'] || 'ไม่ระบุ';
+                if (!types[t]) types[t] = { n: 0, qty: 0 };
+                types[t].n++;
+                types[t].qty += qtyOf(i);
+            });
+            const names = Object.keys(types).sort((a, b) => types[b].qty - types[a].qty);
+            const box = document.getElementById('typeSummary');
+            if (names.length === 0) {
+                box.innerHTML = '<p class="text-sm text-gray-400 py-4 text-center">ไม่มีรายการในวันนี้</p>';
+                return;
+            }
+            box.innerHTML = `<table class="w-full text-sm">
+                <thead><tr class="text-left text-xs text-gray-500 border-b">
+                    <th class="py-1.5 pr-2">ประเภท</th><th class="py-1.5 px-2 text-center">ราย</th><th class="py-1.5 pl-2 text-right">ชิ้น</th>
+                </tr></thead><tbody>` +
+                names.map(n => {
+                    const hazard = n.includes('ขยะอันตราย');
+                    return `<tr class="border-b border-gray-100 ${hazard ? 'bg-red-50' : ''}">
+                        <td class="py-1.5 pr-2">${hazard ? '⚠️ ' : ''}${esc(n)}</td>
+                        <td class="py-1.5 px-2 text-center">${types[n].n}</td>
+                        <td class="py-1.5 pl-2 text-right font-semibold">${types[n].qty}</td></tr>`;
+                }).join('') + '</tbody></table>';
+        }
+
+        function renderWeekStrip() {
+            const sel = document.getElementById('planDate').value;
+            const base = new Date();
+            let html = '';
+            for (let k = 0; k < 7; k++) {
+                const d = new Date(base.getFullYear(), base.getMonth(), base.getDate() + k);
+                const ds = ymd(d);
+                const day = allData.filter(i => i['วันนัดหมาย'] === ds && statusOf(i) !== 'ไม่รับ');
+                const pend = day.filter(i => statusOf(i) === 'รอตรวจ').length;
+                const label = d.toLocaleDateString('th-TH', { weekday: 'short', day: 'numeric', month: 'short' });
+                const active = ds === sel;
+                html += `<button onclick="selectPlanDate('${ds}')" class="shrink-0 text-center px-3 py-2 rounded-xl border text-xs transition ${active ? 'bg-emerald-600 text-white border-emerald-600' : 'bg-slate-50 hover:bg-white text-gray-700 border-gray-300'}">
+                    <div class="font-semibold whitespace-nowrap">${esc(label)}</div>
+                    <div class="text-base font-bold">${day.length}</div>
+                    <div class="${active ? 'text-emerald-100' : 'text-amber-600'}">${pend > 0 ? 'รอตรวจ ' + pend : '&nbsp;'}</div>
+                </button>`;
+            }
+            document.getElementById('weekStrip').innerHTML = html;
+        }
+
+        function stopCardHtml(item, label, muted) {
+            const id = Number(item['ID']);
+            const status = statusOf(item);
+            const c = parseCoord(item['พิกัดแผนที่']);
+            const mapLink = c
+                ? `<a href="https://www.google.com/maps?q=${encodeURIComponent(c.lat + ',' + c.lng)}" target="_blank" rel="noopener" class="text-emerald-700 underline">เปิดแผนที่</a>`
+                : '<span class="text-red-500">ไม่มีพิกัด</span>';
+            const action = status === 'รอตรวจ'
+                ? `<button onclick="updateStatus(${id}, 'นัดหมายแล้ว')" class="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold px-3 py-1.5 rounded-lg">✓ อนุมัติ</button>`
+                : status === 'นัดหมายแล้ว'
+                    ? `<button onclick="updateStatus(${id}, 'เก็บแล้ว')" class="bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold px-3 py-1.5 rounded-lg">✅ เก็บแล้ว</button>`
+                    : '';
+            return `<div class="flex gap-3 border border-slate-200 rounded-xl p-3 ${muted ? 'bg-slate-50 opacity-70' : 'bg-white'}">
+                <div class="shrink-0 w-8 h-8 rounded-full ${muted ? 'bg-emerald-600' : 'bg-blue-600'} text-white font-bold text-sm flex items-center justify-center">${label}</div>
+                <div class="min-w-0 flex-1 text-sm space-y-0.5">
+                    <p class="font-semibold text-gray-800">${esc(item['ชื่อผู้ขอ'] || 'ไม่ระบุชื่อ')}
+                        <span class="text-xs font-normal text-gray-500">${esc(item['รหัสคำขอ'] || '')}</span></p>
+                    <p class="text-gray-600">🏘️ ${esc(item['โซนพื้นที่'] || '-')} · 🏠 ${esc(item['ที่อยู่และจุดวางขยะ'] || '-')}</p>
+                    <p class="text-gray-600">📦 ${esc(item['ประเภทขยะ'] || '-')} (${esc(item['จำนวนชิ้น'] || 1)} ชิ้น)
+                        · 📞 <a href="tel:${esc(item['เบอร์โทรศัพท์'] || '')}" class="text-emerald-700 underline">${esc(item['เบอร์โทรศัพท์'] || '-')}</a>
+                        · ${mapLink}</p>
+                </div>
+                <div class="shrink-0 self-center">${action}</div>
+            </div>`;
+        }
+
+        function renderStopList() {
+            const box = document.getElementById('stopList');
+            let html = '';
+            planOrdered.forEach((s, idx) => { html += stopCardHtml(s.item, idx + 1, false); });
+            if (planNoCoord.length) {
+                html += '<p class="text-xs font-semibold text-red-600 pt-2">ไม่มีพิกัด (จัดลำดับให้ไม่ได้ กรุณาโทรสอบถามที่อยู่)</p>';
+                planNoCoord.forEach(i => { html += stopCardHtml(i, '?', false); });
+            }
+            if (planDoneItems.length) {
+                html += '<p class="text-xs font-semibold text-emerald-700 pt-2">เก็บแล้ว</p>';
+                planDoneItems.forEach(s => { html += stopCardHtml(s.item, '✓', true); });
+            }
+            box.innerHTML = html || '<p class="text-sm text-gray-400 py-6 text-center">ไม่มีจุดที่ต้องไปเก็บในวันที่เลือก</p>';
+        }
+
+        function printPlan() {
+            const rows = planOrdered.map(s => s.item).concat(planNoCoord);
+            if (rows.length === 0) {
+                alert('ไม่มีจุดเก็บให้พิมพ์ในวันที่เลือก');
+                return;
+            }
+            const date = document.getElementById('planDate').value;
+            const printedAt = new Date().toLocaleString('th-TH', { timeZone: 'Asia/Bangkok', dateStyle: 'medium', timeStyle: 'short' });
+            const totalQty = rows.reduce((s, i) => s + (Number(i['จำนวนชิ้น']) || 1), 0);
+            const body = rows.map((i, idx) => `
+                <tr>
+                    <td class="nowrap">${idx + 1}</td>
+                    <td class="nowrap">${esc(i['รหัสคำขอ'])}</td>
+                    <td>${esc(i['ชื่อผู้ขอ'])}</td>
+                    <td class="nowrap">${esc(i['เบอร์โทรศัพท์'])}</td>
+                    <td>${esc(i['โซนพื้นที่'])}</td>
+                    <td>${esc(i['ที่อยู่และจุดวางขยะ'])}</td>
+                    <td>${esc(i['ประเภทขยะ'])} (${esc(i['จำนวนชิ้น'] || 1)})</td>
+                    <td style="width:80px"></td>
+                </tr>`).join('');
+            document.getElementById('printArea').innerHTML = `
+                <h1><img src="${LOGO_SRC}" alt="" style="height:36px;vertical-align:middle;margin-right:8px" onerror="this.remove()">ใบงานเส้นทางเก็บขยะชิ้นใหญ่และขยะอันตราย เทศบาลเมืองบัวใหญ่</h1>
+                <div class="meta">วันที่เก็บ: ${esc(date)} | ${rows.length} จุด ${totalQty} ชิ้น | เรียงตามลำดับแนะนำ | พิมพ์เมื่อ ${esc(printedAt)}</div>
+                <table>
+                    <thead><tr><th>ลำดับ</th><th>รหัส</th><th>ชื่อ</th><th>เบอร์โทร</th><th>ชุมชน</th>
+                    <th>ที่อยู่/จุดวางขยะ</th><th>สิ่งของ (ชิ้น)</th><th>หมายเหตุ/ลงชื่อ</th></tr></thead>
+                    <tbody>${body}</tbody>
+                </table>`;
+            window.print();
+        }
+
+        // ---------- ส่งออก CSV (เปิดด้วย Excel ได้) ----------
+        function csvCell(v) {
+            let s = String(v ?? '');
+            // กัน CSV injection: ข้อความที่ขึ้นต้นด้วย = + - @ จะถูกมองเป็นสูตรใน Excel
+            if (/^[=+\-@\t\r]/.test(s)) s = "'" + s;
+            return '"' + s.replace(/"/g, '""') + '"';
+        }
+
+        // เบอร์โทร: ใส่ ="..." เพื่อให้ Excel ไม่ตัดเลข 0 ข้างหน้าทิ้ง
+        function csvPhone(v) {
+            const p = String(v ?? '').replace(/[^0-9+\-\s]/g, '');
+            return '"=""' + p + '"""';
+        }
+
+        function exportCSV() {
+            if (filteredData.length === 0) {
+                alert('ไม่มีรายการให้ส่งออก');
+                return;
+            }
+            const headers = ['รหัสคำขอ', 'ชื่อผู้ขอ', 'เบอร์โทรศัพท์', 'โซนพื้นที่', 'ที่อยู่และจุดวางขยะ',
+                'พิกัดแผนที่', 'ประเภทขยะ', 'จำนวนชิ้น', 'วิธีการส่ง', 'วันนัดหมาย', 'สถานะคำขอ', 'เวลาที่ส่งคำขอ'];
+
+            const rows = filteredData.map(i => [
+                csvCell(i['รหัสคำขอ']),
+                csvCell(i['ชื่อผู้ขอ']),
+                csvPhone(i['เบอร์โทรศัพท์']),
+                csvCell(i['โซนพื้นที่']),
+                csvCell(i['ที่อยู่และจุดวางขยะ']),
+                csvCell(i['พิกัดแผนที่']),
+                csvCell(i['ประเภทขยะ']),
+                csvCell(i['จำนวนชิ้น']),
+                csvCell(i['วิธีการส่ง']),
+                csvCell(i['วันนัดหมาย']),
+                csvCell(statusOf(i)),
+                csvCell(fmtDateTime(i['created_at']))
+            ].join(','));
+
+            const csv = '\uFEFF' + headers.map(csvCell).join(',') + '\r\n' + rows.join('\r\n');
+            const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+            const url = URL.createObjectURL(blob);
+            const t = new Date();
+            const stamp = t.getFullYear() + '-' + String(t.getMonth() + 1).padStart(2, '0') + '-' + String(t.getDate()).padStart(2, '0');
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `waste_requests_${stamp}.csv`;
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+            URL.revokeObjectURL(url);
+        }
+
+        // ---------- พิมพ์ใบงานรถเก็บขยะ ----------
+        function printWorksheet() {
+            if (filteredData.length === 0) {
+                alert('ไม่มีรายการให้พิมพ์');
+                return;
+            }
+
+            // เรียงตามชุมชน แล้วตามลำดับคำขอ เพื่อให้วางแผนเส้นทางง่าย
+            const rows = [...filteredData].sort((a, b) =>
+                String(a['โซนพื้นที่'] || '').localeCompare(String(b['โซนพื้นที่'] || ''), 'th') ||
+                (Number(a['ID']) - Number(b['ID']))
+            );
+
+            const st = document.getElementById('filterStatus').value || 'ทุกสถานะ';
+            const zone = document.getElementById('filterZone').value || 'ทุกชุมชน';
+            const date = document.getElementById('filterDate').value || 'ทุกวัน';
+            const printedAt = new Date().toLocaleString('th-TH', { timeZone: 'Asia/Bangkok', dateStyle: 'medium', timeStyle: 'short' });
+            const totalQty = rows.reduce((s, i) => s + (Number(i['จำนวนชิ้น']) || 1), 0);
+
+            const body = rows.map((i, idx) => `
+                <tr>
+                    <td class="nowrap">${idx + 1}</td>
+                    <td class="nowrap">${esc(i['รหัสคำขอ'])}</td>
+                    <td>${esc(i['ชื่อผู้ขอ'])}</td>
+                    <td class="nowrap">${esc(i['เบอร์โทรศัพท์'])}</td>
+                    <td>${esc(i['โซนพื้นที่'])}</td>
+                    <td>${esc(i['ที่อยู่และจุดวางขยะ'])}</td>
+                    <td>${esc(i['ประเภทขยะ'])} (${esc(i['จำนวนชิ้น'] || 1)})</td>
+                    <td>${esc(i['วิธีการส่ง'])}</td>
+                    <td class="nowrap">${esc(i['วันนัดหมาย'])}</td>
+                    <td style="width:70px"></td>
+                </tr>`).join('');
+
+            document.getElementById('printArea').innerHTML = `
+                <h1><img src="${LOGO_SRC}" alt="" style="height:36px;vertical-align:middle;margin-right:8px" onerror="this.remove()">ใบงานเก็บขยะชิ้นใหญ่และขยะอันตราย เทศบาลเมืองบัวใหญ่</h1>
+                <div class="meta">
+                    สถานะ: ${esc(st)} | ชุมชน: ${esc(zone)} | วันนัดเก็บ: ${esc(date)} |
+                    รวม ${rows.length} คำขอ ${totalQty} ชิ้น | พิมพ์เมื่อ ${esc(printedAt)}
+                </div>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>ที่</th><th>รหัส</th><th>ชื่อ</th><th>เบอร์โทร</th><th>ชุมชน</th>
+                            <th>ที่อยู่/จุดวางขยะ</th><th>สิ่งของ (ชิ้น)</th><th>วิธีทิ้ง</th><th>วันนัด</th><th>หมายเหตุ/ลงชื่อ</th>
+                        </tr>
+                    </thead>
+                    <tbody>${body}</tbody>
+                </table>`;
+
+            window.print();
+        }
+    </script>
+</body>
+</html>
